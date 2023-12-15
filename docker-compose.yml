@@ -1,0 +1,69 @@
+version: "3.8"
+
+services:
+  postgres:
+    container_name: rxresumev3_db
+    image: postgres:15-alpine
+    restart: always  
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      start_period: 15s
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    env_file:
+      - .env
+    volumes:
+      - rxresumev3-pgdata:/var/lib/postgresql/data
+    networks:
+      - rxresumev3
+
+  server:
+    container_name: rxresume_server
+    image: amruthpillai/reactive-resume:server-latest
+    restart: always
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    volumes:
+      - rxresumev3_uploads:/app/server/dist/assets/uploads
+      - rxresumev3_export:/app/server/dist/assets/exports
+    networks:
+      - reverseproxy
+      - rxresumev3
+#    ports:
+#      - 3100:3100
+
+
+
+  client:
+    container_name: rxresumev3_client
+    image: amruthpillai/reactive-resume:client-latest
+    restart: always
+    depends_on:
+      - server
+    env_file:
+      - .env
+    networks:
+      - reverseproxy
+      - rxresumev3
+#    ports:
+#      - 127.0.0.1:3000:3000
+   
+
+
+
+volumes:
+  rxresumev3-pgdata:
+    external: true
+  rxresumev3_uploads:
+    external: true
+  rxresumev3_export:
+    external: true
+
+networks:
+  rxresumev3:
+    external: true
+  reverseproxy:
+    external: true
