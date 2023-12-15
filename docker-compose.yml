@@ -1,69 +1,104 @@
-version: "3.8"
+version: "3.3"
+
+# In this Docker Compose example, it assumes that you maintain a reverse proxy externally (or chose not to).
+# The only two exposed ports here are from minio (:9000) and the app itself (:3000).
+# If these ports are changed, ensure that the env vars passed to the app are also changed accordingly.
 
 services:
+  # Database (Postgres)
   postgres:
-    container_name: rxresumev3_db
+    container_name: rxresume_postgres
     image: postgres:15-alpine
-    restart: always  
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      start_period: 15s
-      interval: 30s
-      timeout: 30s
-      retries: 3
+    restart: unless-stopped
+    volumes:
+      - rxresumev4_postgres_data:/var/lib/postgresql/data
     env_file:
       - .env
-    volumes:
-      - rxresumev3-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
-      - rxresumev3
+     - rxresumev4
 
-  server:
-    container_name: rxresume_server
-    image: amruthpillai/reactive-resume:server-latest
-    restart: always
+  # Storage (for image uploads)
+#  minio:
+#    container_name: rxresume_minio
+#    image: minio/minio
+#    restart: unless-stopped
+#    command: server /data
+#    volumes:
+#      - rxresumev4_minio_data:/data
+#    env_file:
+#      - .env
+#    ports:
+#      - 9000:9000
+#    labels:
+#      - traefik.enable=true
+#      - traefik.http.routers.storage.rule=Host(`minio.example.com`)
+#      - traefik.http.routers.storage.entrypoints=websecure
+#      - traefik.http.routers.storage.tls.certresolver=letsencrypt
+#      - traefik.http.services.storage.loadbalancer.server.port=9000
+#    networks:
+      
+#      - reverseproxy
+     
+#    command: server --console-address ":9001" /data  #For minio portal
+
+  # Chrome Browser (for printing and previews)
+  chrome:
+    container_name: rxresume_chrome
+    image: browserless/chrome:1.61.0-puppeteer-21.4.1
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - reverseproxy
+
+  # Redis (for cache & server session management)
+  redis:
+    container_name: rxresume_redis
+    image: redis:alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --requirepass password
+    volumes:
+      - rxresumev4_redis_data:/data
+    networks:
+      - reverseproxy
+
+
+  app:
+    container_name: rxresume_app
+    image: myresume
+    restart: unless-stopped
     depends_on:
       - postgres
-    env_file:
-      - .env
-    volumes:
-      - rxresumev3_uploads:/app/server/dist/assets/uploads
-      - rxresumev3_export:/app/server/dist/assets/exports
-    networks:
-      - reverseproxy
-      - rxresumev3
-#    ports:
-#      - 3100:3100
-
-
-
-  client:
-    container_name: rxresumev3_client
-    image: amruthpillai/reactive-resume:client-latest
-    restart: always
-    depends_on:
-      - server
+#      - minio
+      - redis
+      - chrome
     env_file:
       - .env
     networks:
       - reverseproxy
-      - rxresumev3
-#    ports:
-#      - 127.0.0.1:3000:3000
-   
-
-
+      - rxresumev4
+      
+      
+      
 
 volumes:
-  rxresumev3-pgdata:
-    external: true
-  rxresumev3_uploads:
-    external: true
-  rxresumev3_export:
-    external: true
-
+#  rxresumev4_minio_data:
+#    external:
+#      true
+  rxresumev4_postgres_data:
+    external:
+      true
+  rxresumev4_redis_data:
+    external:
+      true
+  
 networks:
-  rxresumev3:
-    external: true
   reverseproxy:
+    external: true
+  rxresumev4:
     external: true
